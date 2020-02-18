@@ -1,0 +1,191 @@
+Ir no backend
+
+yarn add socket.io
+
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+const http = require("http");
+const routes = require("./routes");
+const { setupWebsocket } = require("./websocket");
+
+const app = express();
+const server = http.Server(app);
+
+setupWebsocket(server);
+
+mongoose.connect(
+  "mongodb+srv://omnistack:omnistack@cluster0-owvmk.mongodb.net/week10?retryWrites=true&w=majority",
+  {
+    useNewUrlParser: true, // Para tirar os erros no terminal
+    useUnifiedTopology: true,
+    useFindAndModify: false,
+    useCreateIndex: true
+  }
+);
+
+app.use(cors());
+// Para o express entender requisicoes no formato JSON
+app.use(express.json());
+
+app.use(routes);
+
+server.listen(3333);
+
+--------------------------------------------------------------------------------
+
+'websocket.js':
+
+const socketio = require("socket.io");
+
+exports.setupWebsocket = server => {
+  const io = socketio(server);
+
+  io.on("connection", socket => {
+    console.log(socket.id);
+  });
+};
+
+================================================================================
+
+Ir no mobile
+
+yarn add socket.io-client
+
+Na pasta services criar o arquivo socket.js
+
+socket.js
+import socketio from "socket.io-client";
+
+const socket = socketio("http://192.168.1.107:3333", {
+  autoConnect: false
+});
+
+function connect() {
+  socket.connect();
+}
+
+function disconnect() {
+  if (socket.connect) {
+    socket.disconnect();
+  }
+}
+
+export { connect, disconnect };
+
+--------------------------------------------------------------------------------
+
+No Main importar o socket
+
+import api from "../services/api";
+import { connect, disconnect } from "../services/socket";
+
+export default function Main({ navigation }) {
+  const [devs, setDevs] = useState([]);
+  const [currentRegion, setCurrentRegion] = useState(null);
+  const [techs, setTechs] = useState("");
+
+  useEffect(() => {
+    async function loadInitialPosition() {
+      const { granted } = await requestPermissionsAsync();
+
+      if (granted) {
+        const { coords } = await getCurrentPositionAsync({
+          enableHighAccuracy: true
+        });
+
+        const { latitude, longitude } = coords;
+
+        setCurrentRegion({
+          latitude,
+          longitude,
+          latitudeDelta: 0.04,
+          longitudeDelta: 0.04
+        });
+      }
+    }
+
+    loadInitialPosition();
+  }, []);
+
+  // Para iniciar o websocket
+  function setupWebsocket() {
+    const { latitude, longitude } = currentRegion;
+
+    connect(latitude, longitude, techs);
+  }
+
+  async function loadDevs() {
+    const { latitude, longitude } = currentRegion;
+
+    const response = await api.get("/search", {
+      params: {
+        latitude,
+        longitude,
+        techs
+      }
+    });
+
+    setDevs(response.data);
+
+    setupWebsocket();
+  }
+
+--------------------------------------------------------------------------------
+
+'socket.js'
+import socketio from "socket.io-client";
+
+const socket = socketio("http://192.168.1.107:3333", {
+  autoConnect: false
+});
+
+function connect(latitude, longitude, techs) {
+  socket.io.opts.query = {
+    latitude,
+    longitude,
+    techs
+  };
+
+  socket.connect();
+}
+
+function disconnect() {
+  if (socket.connect) {
+    socket.disconnect();
+  }
+}
+
+export { connect, disconnect };
+
+--------------------------------------------------------------------------------
+
+No backend
+
+'websocket.js'
+const socketio = require("socket.io");
+
+exports.setupWebsocket = server => {
+  const io = socketio(server);
+
+  io.on("connection", socket => {
+    console.log(socket.id);
+    console.log(socket.handshake.query); // Parametros
+  });
+};
+
+--------------------------------------------------------------------------------
+
+*
+*
+*
+*
+*
+*
+*
+*
+*
+
+================================================================================
+
+No backend criar um calculo para calcula a distancia entre dois pontos
